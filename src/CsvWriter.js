@@ -20,6 +20,9 @@ class CsvWriter {
         if (this.logSuccess) {
           console.log(`${ path } written successfully.`)
         }
+      })
+      .catch((err) => {
+        console.log("Error: ", err);
       });
   }
 }

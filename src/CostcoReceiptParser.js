@@ -24,25 +24,39 @@ class CostcoReceiptParser {
     this.itemNameByItemIdentifier = {};
     this.itemIdentifierByItemName = {};
     this.itemIdentifierByDiscountIdentifier = {};
+    this.currentLineNumber = 0;
+    this.headerLength = 2;
+    this.storeIdentifierLength = 5;
   }
 
   parseLine(line) {
-    // The first 3 lines of the receipt are the store identifier, street address, and city/state/zip
-    if(this.storeLines.length < 3) {
-      this.storeLines.push(line);
+    // The first 2 lines of the receipt are header (date and time) and footer(costco url)
+    if(this.currentLineNumber < this.headerLength){
+      this.currentLineNumber += 1;
       return;
     }
 
-    if (!this.receiptIdentifier && this.storeLines.length === 3) {
+
+    // The next 3 (line 3,4,5) lines are the store identifier, street address, and city/state/zip.
+    if(this.currentLineNumber < this.storeIdentifierLength) {
+      this.storeLines.push(line);
+      this.currentLineNumber += 1;
+      return;
+    }
+    // The next 2 lines (7, 8) are Member number information
+    if (!this.receiptIdentifier && this.currentLineNumber === this.storeIdentifierLength) {
+      this.currentLineNumber += 1;
       this.receiptIdentifier = line;
       return;
     }
+
+    this.currentLineNumber += 1;
 
     if (this.#parseMemberIdentifier(line)) {
       return;
     }
 
-    // When there are no remaining transactions, grab metadata such as the receipt date and 
+    // When there are no remaining transactions, grab metadata such as the receipt date and
     // total items sold.
     if (!this.hasRemainingTransactions) {
       this.#parseReceiptMetadata(line);
@@ -64,7 +78,7 @@ class CostcoReceiptParser {
         amount: this.tax
       };
     }
-  
+
     const total = this.#find(line, "****TOTAL");
     if (total) {
       this.hasRemainingTransactions = false;
@@ -81,7 +95,7 @@ class CostcoReceiptParser {
     if (multilineTransaction) {
       return multilineTransaction;
     }
-  
+
     // A typical transaction spans only one line.
     //
     // Example:
@@ -92,7 +106,7 @@ class CostcoReceiptParser {
   setMultilineMode(val) {
     this.multilineMode = val;
   }
-  
+
   isInMultilineMode() {
     return this.multilineMode;
   }
@@ -219,7 +233,7 @@ class CostcoReceiptParser {
       }
     }
   }
-  
+
   #parseTransaction(line) {
     const transaction = this.#transactionReplacements(line);
 
@@ -233,6 +247,7 @@ class CostcoReceiptParser {
       const { itemName, itemIdentifier } = this.#determineItemNameAndIdentifier(
         amount, foundTransaction[2], foundTransaction[1]
       );
+      console.log("itemIdentifier: ", itemIdentifier, "itemName: ", itemName, "amount: ", amount);
 
       return {
         itemIdentifier: itemIdentifier,
@@ -240,7 +255,7 @@ class CostcoReceiptParser {
         amount: amount
       }
     }
-  
+
     return undefined;
   }
 
@@ -330,11 +345,22 @@ class CostcoReceiptParser {
   // price and mess up the total. We add a space after known problematic
   // item names to prevent this issue.
   #transactionReplacements(line) {
-    const itemNamesWithNumbers = ["KS WATER 40", "CHNT 10-3/8"];
+    const itemNamesWithNumbers = ["KS WATER 40", "CHNT 10-3/8", "AIRWICK 9+1"];
 
     for (const itemName of itemNamesWithNumbers) {
       if (line.includes(itemName)) {
-        return line.replace(itemName, `${ itemName } `);
+        line =  line.replace(itemName, `${ itemName } `);
+      }
+    }
+
+    // Handle refunds whose format is the following:
+    // refundIdentifer /itemIdentifier amount-, e.g.,
+    // Original: 1727803 BATH TOWEL 19.98 Y
+    // Refund: 318163 /1727803 4.00- (raw: 318163/17278034.00-)
+    // If we don't do this it will be difficult to parse the refund amount because how the raw format of the line.
+    for(const [itemIdentifier, itemName] of Object.entries(this.itemNameByItemIdentifier)){
+      if (line.includes(itemIdentifier)){
+        line = line.replace(itemIdentifier, itemName);
       }
     }
 
@@ -344,7 +370,7 @@ class CostcoReceiptParser {
   #dollarRegex() {
     return `(${ this.regexUtils.dollar() }-?)`;
   }
-  
+
   #formatAmount(amount) {
     // check if last char is a `-`, this means it's negative (refund)
     if (amount.slice(-1) === "-") {
@@ -353,7 +379,7 @@ class CostcoReceiptParser {
       return this.numberUtils.dollarToNumber(amount);
     }
   }
-  
+
   #find(line, str) {
     const indexOfSubtotal = line.indexOf(str);
     if (indexOfSubtotal > -1) {

@@ -54,7 +54,7 @@ function parseReceiptPdf(pdf) {
       transactions.push(transaction);
       totalSpent += transaction[AMOUNT];
     }
-    
+
     for (const line of data.text.split("\n")) {
       parseReceiptLine(line, costcoReceiptParser, updateTransactionsAndTotalSpent);
     }
@@ -81,7 +81,7 @@ function parseReceiptLine(line, costcoReceiptParser, updateFn) {
     return;
   }
 
-  if (costcoReceiptParser.isInMultilineMode()) {  
+  if (costcoReceiptParser.isInMultilineMode()) {
     // Once the multiline transaction has an amount, we're done with multiline mode.
     if (Object.keys(transaction).includes(AMOUNT)) {
       costcoReceiptParser.setMultilineMode(false);
@@ -119,6 +119,6 @@ function writeToCsv(transactions) {
     { id: "itemName", title: "Item name" },
     { id: "amount", title: "Amount" },
   ];
-  new CsvWriter({ outputDir: OUTPUT_DIRECTORY, headers: headers, append: true, logSuccess: false })
+  new CsvWriter({ outputDir: OUTPUT_DIRECTORY, headers: headers, append: false, logSuccess: false })
     .write("costco-receipts.csv", transactions);
 }
